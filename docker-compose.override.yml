@@ -1,0 +1,26 @@
+# Docker Compose Override for Development - Hot Reload with Containerized Database.
+# Uses containerized PostgreSQL running in docker-compose.yml.
+
+version: '3.8'
+
+services:
+  redis:
+    # No changes needed for dev redis
+
+  backend:
+    # Development override with hot reload enabled
+    environment:
+      DEBUG: "True"
+      DATABASE_URL: postgresql+asyncpg://alumni_user:secure_password_change_me@postgres:5432/alumni_db
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    # Development override with Vite dev server
+    build:
+      context: ./tms_ui
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+    volumes:
+      - ./tms_ui:/app
+      - /app/node_modules

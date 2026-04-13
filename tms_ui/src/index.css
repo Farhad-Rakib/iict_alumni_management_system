@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	--brand-primary: #006a4e;
+	--brand-accent: #c1272d;
+	--brand-surface: #f3faf7;
+}
+
+body {
+	background: linear-gradient(135deg, var(--brand-surface) 0%, #ffffff 55%, #fff6f6 100%);
+}
+
+::selection {
+	background: rgba(0, 106, 78, 0.2);
+	color: #0f172a;
+}
