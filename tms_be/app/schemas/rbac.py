@@ -20,6 +20,7 @@ class PermissionResponse(BaseModel):
     description: Optional[str] = None
     resource: str
     action: str
+    endpoint_count: int = 0
 
     class Config:
         from_attributes = True
@@ -90,9 +91,27 @@ class UserAssignmentsResponse(BaseModel):
 
 
 class PermissionSyncResponse(BaseModel):
-    discovered_permissions: list[str] = []
-    created_permissions: list[str] = []
-    existing_permissions: list[str] = []
+    discovered_permissions: list[str] = Field(default_factory=list)
+    created_permissions: list[str] = Field(default_factory=list)
+    existing_permissions: list[str] = Field(default_factory=list)
     discovered_count: int = 0
     created_count: int = 0
     existing_count: int = 0
+    endpoint_count: int = 0
+
+
+class EndpointPermissionResponse(BaseModel):
+    id: int
+    route_path: str
+    http_method: str
+    route_name: Optional[str] = None
+    resource: str
+    action: str
+    permission_name: str
+    permission_id: Optional[int] = None
+    source: str
+    is_active: bool
+    last_synced_at: datetime
+
+    class Config:
+        from_attributes = True

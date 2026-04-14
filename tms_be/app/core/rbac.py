@@ -1,105 +1,44 @@
 """RBAC helpers for role-to-permission mapping."""
-from app.models.user import RoleEnum
 
 
-ROLE_PERMISSIONS: dict[RoleEnum, set[str]] = {
-    RoleEnum.SUPER_ADMIN: {"*"},
-    RoleEnum.ADMIN: {
-        "dashboard.view",
-        "reports.view",
-        "activity.view",
-        "settings.view",
-        "rbac.manage",
-        "rbac.permissions.view",
-        "rbac.roles.view",
-        "rbac.users.view",
-        "rbac.role_permissions.view",
-        "rbac.user_roles.view",
-        "rbac.user_permissions.view",
-        "users.view",
-        "users.create",
-        "users.edit",
-        "users.delete",
-        "alumni.view",
-        "alumni.create",
-        "alumni.edit",
-        "alumni.delete",
-        "events.view",
-        "events.create",
-        "events.edit",
-        "events.delete",
-        "events.rsvp",
-        "events.view_rsvps",
-        "jobs.view",
-        "jobs.create",
-        "jobs.edit",
-        "jobs.delete",
-        "jobs.apply",
-        "jobs.view_applications",
-        "notices.view",
-        "notices.manage_categories",
-        "notices.create",
-        "notices.edit",
-        "notices.delete",
-        "elections.view",
-        "elections.manage",
-        "elections.vote",
-        "elections.results",
-        "cms.view",
-        "cms.manage",
-        "alumni.profile.edit",
-    },
-    RoleEnum.EVENT_MANAGER: {
-        "dashboard.view",
-        "reports.view",
-        "events.view",
-        "events.create",
-        "events.edit",
-        "events.rsvp",
-        "events.view_rsvps",
-        "jobs.view",
-        "notices.view",
-        "alumni.view",
-    },
-    RoleEnum.ELECTION_MANAGER: {
-        "dashboard.view",
-        "reports.view",
-        "elections.view",
-        "elections.manage",
-        "elections.vote",
-        "elections.results",
-        "notices.view",
-        "alumni.view",
-    },
-    RoleEnum.ALUMNI: {
-        "dashboard.view",
-        "reports.view",
-        "alumni.view",
-        "alumni.profile.edit",
-        "events.view",
-        "events.rsvp",
-        "jobs.view",
-        "jobs.apply",
-        "notices.view",
-        "elections.view",
-        "elections.vote",
-        "elections.results",
-        "cms.view",
-    },
+ACTION_ALIASES: dict[str, str] = {
+    "add": "create",
+    "create": "create",
+    "view": "read",
+    "read": "read",
+    "edit": "update",
+    "update": "update",
+    "delete": "delete",
 }
 
 
-def get_permissions_for_role(role: RoleEnum) -> set[str]:
-    """Return permissions associated with the user role."""
-    return ROLE_PERMISSIONS.get(role, set())
+def normalize_permission_name(permission: str) -> str:
+    """Normalize permission naming to resource.crud_action format when applicable."""
+    if permission == "*" or "." not in permission:
+        return permission
+    parts = permission.split(".")
+    if len(parts) < 2:
+        return permission
+    if len(parts) == 2:
+        resource, action = parts
+        mapped_action = ACTION_ALIASES.get(action, action)
+        return f"{resource}.{mapped_action}"
 
+    # For nested permissions (e.g., rbac.permissions.view), normalize only the last segment.
+    prefix = ".".join(parts[:-1])
+    last = parts[-1]
+    mapped_last = ACTION_ALIASES.get(last, last)
+    return f"{prefix}.{mapped_last}"
 
 def has_permissions(user_permissions: set[str], required_permissions: tuple[str, ...], require_all: bool) -> bool:
     """Check if permissions satisfy the required list."""
-    if "*" in user_permissions:
+    normalized_user_permissions = {normalize_permission_name(p) for p in user_permissions}
+    normalized_required = tuple(normalize_permission_name(p) for p in required_permissions)
+
+    if "*" in user_permissions or "*" in normalized_user_permissions:
         return True
-    if not required_permissions:
+    if not normalized_required:
         return True
     if require_all:
-        return all(permission in user_permissions for permission in required_permissions)
-    return any(permission in user_permissions for permission in required_permissions)
+        return all(permission in user_permissions or permission in normalized_user_permissions for permission in normalized_required)
+    return any(permission in user_permissions or permission in normalized_user_permissions for permission in normalized_required)

@@ -29,12 +29,16 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SENDER_EMAIL: str = "noreply@alumni.com"
     FRONTEND_VERIFY_URL: str = "http://localhost:5173/verify"
+    FRONTEND_SET_PASSWORD_URL: str = "http://localhost:5173/set-password"
     FRONTEND_RESET_URL: str = "http://localhost:5173/reset-password"
 
     # Application
     APP_NAME: str = "Alumni Management System"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    SUPERADMIN_EMAIL: str = "superadmin@alumni.com"
+    SUPERADMIN_PASSWORD: str = "SuperAdmin@123"
+    SUPERADMIN_FULL_NAME: str = "Super Admin"
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:5173",

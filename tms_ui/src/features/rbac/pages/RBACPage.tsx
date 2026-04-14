@@ -89,6 +89,7 @@ export const RBACPage: React.FC = () => {
   const [userPermissionIds, setUserPermissionIds] = useState<number[]>([]);
 
   const [permissionSearch, setPermissionSearch] = useState('');
+  const [endpointSearch, setEndpointSearch] = useState('');
   const [roleSearch, setRoleSearch] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [roleMappingSearch, setRoleMappingSearch] = useState('');
@@ -105,6 +106,11 @@ export const RBACPage: React.FC = () => {
   const { data: permissions = [] } = useQuery({
     queryKey: ['rbac-permissions'],
     queryFn: () => rbacApi.getPermissions(),
+  });
+
+  const { data: endpointPermissions = [] } = useQuery({
+    queryKey: ['rbac-endpoint-permissions'],
+    queryFn: () => rbacApi.getEndpointPermissions(),
   });
 
   const { data: roles = [] } = useQuery({
@@ -164,6 +170,7 @@ export const RBACPage: React.FC = () => {
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['rbac-permissions'] });
+    await queryClient.invalidateQueries({ queryKey: ['rbac-endpoint-permissions'] });
     await queryClient.invalidateQueries({ queryKey: ['rbac-roles'] });
     await queryClient.invalidateQueries({ queryKey: ['rbac-users'] });
     await queryClient.invalidateQueries({ queryKey: ['rbac-user-assignments'] });
@@ -184,7 +191,7 @@ export const RBACPage: React.FC = () => {
     mutationFn: () => rbacApi.syncPermissions(),
     onSuccess: async (result) => {
       toast.success(
-        `Permission sync complete: ${result.created_count} created, ${result.existing_count} already existing`
+        `Permission sync complete: ${result.created_count} created, ${result.existing_count} existing, ${result.endpoint_count} endpoints scanned`
       );
       await invalidate();
     },
@@ -296,6 +303,17 @@ export const RBACPage: React.FC = () => {
     );
   }, [permissions, permissionSearch]);
 
+  const filteredEndpointPermissions = useMemo(() => {
+    const term = endpointSearch.toLowerCase();
+    return endpointPermissions.filter(
+      (endpoint) =>
+        endpoint.route_path.toLowerCase().includes(term) ||
+        endpoint.http_method.toLowerCase().includes(term) ||
+        endpoint.permission_name.toLowerCase().includes(term) ||
+        endpoint.resource.toLowerCase().includes(term)
+    );
+  }, [endpointPermissions, endpointSearch]);
+
   const filteredRoles = useMemo(() => {
     const term = roleSearch.toLowerCase();
     return roles.filter(
@@ -385,31 +403,50 @@ export const RBACPage: React.FC = () => {
       )}
 
       {showPermissions && (
-        <DataTable
-          columns={[
-            { key: 'name', label: 'Name' },
-            { key: 'resource', label: 'Resource' },
-            { key: 'action', label: 'Action' },
-            { key: 'description', label: 'Description', sortable: false },
-          ]}
-          data={filteredPermissions}
-          searchable
-          searchPlaceholder="Search permissions"
-          onSearch={setPermissionSearch}
-          emptyState={{ title: 'No permissions', description: 'Add your first permission to get started.' }}
-          actions={canManage ? {
-            custom: [
-              {
-                label: syncPermissionsMutation.isPending ? 'Syncing...' : 'Sync Permissions',
-                onClick: () => {
-                  if (!syncPermissionsMutation.isPending) syncPermissionsMutation.mutate();
+        <div className="space-y-4">
+          <DataTable
+            columns={[
+              { key: 'name', label: 'Name' },
+              { key: 'resource', label: 'Resource' },
+              { key: 'action', label: 'Action' },
+              { key: 'endpoint_count', label: 'Endpoints' },
+              { key: 'description', label: 'Description', sortable: false },
+            ]}
+            data={filteredPermissions}
+            searchable
+            searchPlaceholder="Search permissions"
+            onSearch={setPermissionSearch}
+            emptyState={{ title: 'No permissions', description: 'Add your first permission to get started.' }}
+            actions={canManage ? {
+              custom: [
+                {
+                  label: syncPermissionsMutation.isPending ? 'Syncing...' : 'Sync Permissions',
+                  onClick: () => {
+                    if (!syncPermissionsMutation.isPending) syncPermissionsMutation.mutate();
+                  },
+                  variant: 'secondary',
                 },
-                variant: 'secondary',
-              },
-            ],
-            add: { label: 'Add Permission', onClick: () => setPermissionFormOpen(true) },
-          } : undefined}
-        />
+              ],
+              add: { label: 'Add Permission', onClick: () => setPermissionFormOpen(true) },
+            } : undefined}
+          />
+
+          <DataTable
+            columns={[
+              { key: 'http_method', label: 'Method' },
+              { key: 'route_path', label: 'Endpoint', sortable: false },
+              { key: 'permission_name', label: 'Permission' },
+              { key: 'resource', label: 'Resource' },
+              { key: 'action', label: 'Action' },
+              { key: 'source', label: 'Source' },
+            ]}
+            data={filteredEndpointPermissions}
+            searchable
+            searchPlaceholder="Search endpoint permission inventory"
+            onSearch={setEndpointSearch}
+            emptyState={{ title: 'No endpoint inventory', description: 'Run Sync Permissions to generate endpoint mappings.' }}
+          />
+        </div>
       )}
 
       {showRoles && (

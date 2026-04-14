@@ -134,12 +134,21 @@ class AuthService:
 
         await self.user_repo.commit()
 
+        set_password_url = (
+            f"{settings.FRONTEND_SET_PASSWORD_URL}?token={verification_token}&email={request.email}"
+        )
+
         return {
             "message": "OTP verified",
             "verification_token": verification_token,
+            "set_password_url": set_password_url,
         }
 
-    async def set_password(self, request: SetPasswordRequest) -> dict:
+    async def set_password(
+        self,
+        request: SetPasswordRequest,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> dict:
         """Set password for new user."""
         user = await self.user_repo.get_by_email(request.email)
 
@@ -175,6 +184,15 @@ class AuthService:
         user.password_changed_at = get_utc_now()
 
         await self.user_repo.commit()
+
+        if background_tasks:
+            background_tasks.add_task(
+                EmailService.send_registration_success_email,
+                user.email,
+                user.full_name,
+            )
+        else:
+            await EmailService.send_registration_success_email(user.email, user.full_name)
 
         return {"message": "Password set successfully. You can now login."}
 
@@ -227,7 +245,7 @@ class AuthService:
             await self.user_repo.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
+                detail="Password is wrong. Try with correct password.",
             )
 
         if not user.is_verified:

@@ -34,6 +34,11 @@ class CMSPageRepository(BaseRepository[CMSPage]):
         )
         return result.scalar_one_or_none()
 
+    async def list_pages(self) -> list[CMSPage]:
+        """List all pages."""
+        result = await self.session.execute(select(self.model).order_by(self.model.updated_at.desc()))
+        return result.scalars().all()
+
 
 class SliderRepository(BaseRepository[Slider]):
     """Repository for Slider operations."""
@@ -117,6 +122,11 @@ class CMSService:
         page = await self.page_repo.create(request.model_dump())
         await self.page_repo.commit()
         return page
+
+    async def list_pages(self) -> list[PageResponse]:
+        """List all CMS pages."""
+        pages = await self.page_repo.list_pages()
+        return [PageResponse.model_validate(page) for page in pages]
 
     async def get_page_by_slug(self, slug: str) -> PageResponse:
         """Get page by slug."""

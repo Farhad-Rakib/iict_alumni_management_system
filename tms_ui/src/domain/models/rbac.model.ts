@@ -6,6 +6,21 @@ export interface RbacPermission {
   description?: string;
   resource: string;
   action: string;
+  endpoint_count: number;
+}
+
+export interface EndpointPermission {
+  id: number;
+  route_path: string;
+  http_method: string;
+  route_name?: string;
+  resource: string;
+  action: string;
+  permission_name: string;
+  permission_id?: number;
+  source: 'auto' | 'declared' | string;
+  is_active: boolean;
+  last_synced_at: string;
 }
 
 export interface RbacRole {
@@ -69,4 +84,5 @@ export interface PermissionSyncResponse {
   discovered_count: number;
   created_count: number;
   existing_count: number;
+  endpoint_count: number;
 }

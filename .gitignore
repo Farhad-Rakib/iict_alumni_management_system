@@ -37,3 +37,6 @@ uploads/
 
 # Do not track prompts
 PROMPTS/
+
+# Local runbooks
+MENU_ADDING_INSTRUCTIONS_LOCAL.md

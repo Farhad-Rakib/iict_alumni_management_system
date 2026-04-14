@@ -2,7 +2,7 @@
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.rbac import Role, RolePermission, UserPermission, UserRole
+from app.models.rbac import EndpointPermission, Role, RolePermission, UserPermission, UserRole
 from app.models.user import Permission, User
 
 
@@ -27,6 +27,21 @@ class RBACRepository:
     async def list_permissions(self) -> list[Permission]:
         result = await self.session.execute(select(Permission).order_by(Permission.name.asc()))
         return result.scalars().all()
+
+    async def list_endpoint_permissions(self) -> list[EndpointPermission]:
+        result = await self.session.execute(
+            select(EndpointPermission).order_by(EndpointPermission.resource.asc(), EndpointPermission.http_method.asc(), EndpointPermission.route_path.asc())
+        )
+        return result.scalars().all()
+
+    async def get_endpoint_permission(self, route_path: str, http_method: str) -> EndpointPermission | None:
+        result = await self.session.execute(
+            select(EndpointPermission).where(
+                (EndpointPermission.route_path == route_path)
+                & (EndpointPermission.http_method == http_method)
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def get_permission(self, permission_id: int) -> Permission | None:
         result = await self.session.execute(select(Permission).where(Permission.id == permission_id))
@@ -74,6 +89,12 @@ class RBACRepository:
         await self.session.execute(delete(UserPermission).where(UserPermission.user_id == user_id))
         for permission_id in permission_ids:
             self.session.add(UserPermission(user_id=user_id, permission_id=permission_id))
+
+    async def deactivate_missing_endpoint_permissions(self, active_keys: set[tuple[str, str]]) -> None:
+        rows = await self.list_endpoint_permissions()
+        for row in rows:
+            key = (row.route_path, row.http_method)
+            row.is_active = key in active_keys
 
     async def commit(self) -> None:
         await self.session.commit()

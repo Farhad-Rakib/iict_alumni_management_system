@@ -34,6 +34,15 @@ async def create_page(
     return await cms_service.create_page(request)
 
 
+@router.get("/pages", response_model=list[PageResponse], dependencies=[Depends(require_permission("cms.manage"))])
+async def list_pages(
+    session: AsyncSession = Depends(get_db_session),
+):
+    """List CMS pages."""
+    cms_service = CMSService(session)
+    return await cms_service.list_pages()
+
+
 @router.get("/pages/{slug}", response_model=PageResponse)
 async def get_page(
     slug: str,

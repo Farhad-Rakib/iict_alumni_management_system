@@ -8,15 +8,20 @@ import { siteSettingsApi } from '../../core/api/services/site-settings.api';
 import { useSettingsStore } from '../../features/settings/store/settings.store';
 import { usePreferencesStore } from '../../core/stores/preferences.store';
 import { AppConfig } from '../../core/config/app.config';
+import { useAuthStore } from '../../features/auth/store/auth.store';
 
 export const DashboardLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { hydrateSection, general } = useSettingsStore();
   const { hydrateFromRemote } = usePreferencesStore();
+  const canReadSiteSettings = useAuthStore((state) =>
+    state.hasAnyPermission(['settings.read', 'settings.view', 'site-settings.read', 'site-settings.view'])
+  );
 
   useQuery({
     queryKey: ['site-settings', 'general'],
     queryFn: () => siteSettingsApi.getSetting('general'),
+    enabled: canReadSiteSettings,
     onSuccess: (payload) => {
       hydrateSection('general', payload.setting_value, payload.updated_at);
     },
@@ -25,6 +30,7 @@ export const DashboardLayout: React.FC = () => {
   useQuery({
     queryKey: ['site-settings', 'preferences'],
     queryFn: () => siteSettingsApi.getSetting('preferences'),
+    enabled: canReadSiteSettings,
     onSuccess: (payload) => {
       hydrateFromRemote(payload.setting_value);
     },

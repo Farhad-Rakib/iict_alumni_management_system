@@ -3,6 +3,7 @@ import {
   CreatePermissionRequest,
   CreateRbacUserRequest,
   CreateRoleRequest,
+  EndpointPermission,
   RbacPermission,
   RbacRole,
   RbacUser,
@@ -18,6 +19,10 @@ export class RbacService extends BaseRepository implements IRbacService {
 
   async getPermissions(): Promise<RbacPermission[]> {
     return this.get<RbacPermission[]>('/permissions');
+  }
+
+  async getEndpointPermissions(): Promise<EndpointPermission[]> {
+    return this.get<EndpointPermission[]>('/permissions/endpoints');
   }
 
   async createPermission(dto: CreatePermissionRequest): Promise<RbacPermission> {

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import get_db_session
 from app.dependencies.auth import require_permission
 from app.schemas.rbac import (
+    EndpointPermissionResponse,
     PermissionCreateRequest,
     PermissionResponse,
     RBACUserCreateRequest,
@@ -31,6 +32,16 @@ router = APIRouter(prefix="/api/v1/rbac", tags=["RBAC"])
 async def list_permissions(session: AsyncSession = Depends(get_db_session)):
     service = RBACService(session)
     return await service.list_permissions()
+
+
+@router.get(
+    "/permissions/endpoints",
+    response_model=list[EndpointPermissionResponse],
+    dependencies=[Depends(require_permission("rbac.manage", "rbac.permissions.read", "rbac.permissions.view"))],
+)
+async def list_endpoint_permissions(session: AsyncSession = Depends(get_db_session)):
+    service = RBACService(session)
+    return await service.list_endpoint_permissions()
 
 
 @router.post("/permissions", response_model=PermissionResponse, dependencies=[Depends(require_permission("rbac.manage"))])

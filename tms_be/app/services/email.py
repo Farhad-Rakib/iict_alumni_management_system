@@ -59,3 +59,14 @@ class EmailService:
             f"{reset_link}\n"
         )
         await EmailService.send_email("Reset your alumni account password", recipient, body)
+
+    @staticmethod
+    async def send_registration_success_email(recipient: str, full_name: str) -> None:
+        body = (
+            f"Dear {full_name},\n\n"
+            "Your alumni account registration has been completed successfully.\n"
+            "Welcome to the BUET Alumni Portal. We are glad to have you with us.\n\n"
+            "Best regards,\n"
+            "Alumni Portal Team\n"
+        )
+        await EmailService.send_email("Welcome to the Alumni Portal", recipient, body)

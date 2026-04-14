@@ -46,11 +46,12 @@ async def verify_otp(
 @router.post("/set-password", response_model=dict)
 async def set_password(
     request: SetPasswordRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db_session),
 ):
     """Set password for new user after email verification."""
     auth_service = AuthService(session)
-    return await auth_service.set_password(request)
+    return await auth_service.set_password(request, background_tasks)
 
 
 @router.post("/login", response_model=TokenResponse)

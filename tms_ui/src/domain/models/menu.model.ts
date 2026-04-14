@@ -1,12 +1,12 @@
 export interface MenuItem {
   id: string;
   label: string;
-  path?: string;
-  icon?: string;
-  children?: MenuItem[];
-  permissions?: string[];
-  badge?: string;
-  badgeVariant?: 'primary' | 'success' | 'warning' | 'error';
+  path?: string | null;
+  icon?: string | null;
+  children?: MenuItem[] | null;
+  permissions?: string[] | null;
+  badge?: string | null;
+  badgeVariant?: 'primary' | 'success' | 'warning' | 'error' | null;
 }
 
 export type MenuItems = MenuItem[];

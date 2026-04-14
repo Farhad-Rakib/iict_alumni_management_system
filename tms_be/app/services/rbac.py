@@ -1,15 +1,17 @@
 """Service layer for RBAC management operations."""
+from datetime import datetime
 from collections.abc import Callable
 from fastapi import HTTPException, status
 from fastapi.routing import APIRoute
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import ROLE_PERMISSIONS, get_permissions_for_role
+from app.core.rbac import normalize_permission_name
 from app.core.security import hash_password
-from app.models.rbac import Role
+from app.models.rbac import EndpointPermission, Role
 from app.models.user import Permission, RoleEnum, User
 from app.repositories.rbac import RBACRepository
 from app.schemas.rbac import (
+    EndpointPermissionResponse,
     PermissionCreateRequest,
     PermissionResponse,
     RBACUserCreateRequest,
@@ -23,55 +25,6 @@ from app.schemas.rbac import (
     UserRoleUpdateRequest,
     PermissionSyncResponse,
 )
-
-
-DEFAULT_PERMISSION_META: dict[str, tuple[str, str, str]] = {
-    "dashboard.view": ("View dashboard", "dashboard", "view"),
-    "reports.view": ("View reports", "reports", "view"),
-    "activity.view": ("View activity logs", "activity", "view"),
-    "settings.view": ("View settings", "settings", "view"),
-    "rbac.manage": ("Manage RBAC", "rbac", "manage"),
-    "rbac.permissions.view": ("View RBAC permissions", "rbac", "permissions_view"),
-    "rbac.roles.view": ("View RBAC roles", "rbac", "roles_view"),
-    "rbac.users.view": ("View RBAC users", "rbac", "users_view"),
-    "rbac.role_permissions.view": ("View role-permission mappings", "rbac", "role_permissions_view"),
-    "rbac.user_roles.view": ("View user-role mappings", "rbac", "user_roles_view"),
-    "rbac.user_permissions.view": ("View user-permission mappings", "rbac", "user_permissions_view"),
-    "users.view": ("View users", "users", "view"),
-    "users.create": ("Create users", "users", "create"),
-    "users.edit": ("Edit users", "users", "edit"),
-    "users.delete": ("Delete users", "users", "delete"),
-    "alumni.view": ("View alumni", "alumni", "view"),
-    "alumni.create": ("Create alumni", "alumni", "create"),
-    "alumni.edit": ("Edit alumni", "alumni", "edit"),
-    "alumni.delete": ("Delete alumni", "alumni", "delete"),
-    "alumni.profile.edit": ("Edit own alumni profile", "alumni", "profile_edit"),
-    "events.view": ("View events", "events", "view"),
-    "events.create": ("Create events", "events", "create"),
-    "events.edit": ("Edit events", "events", "edit"),
-    "events.delete": ("Delete events", "events", "delete"),
-    "events.rsvp": ("RSVP events", "events", "rsvp"),
-    "events.view_rsvps": ("View event RSVPs", "events", "view_rsvps"),
-    "jobs.view": ("View jobs", "jobs", "view"),
-    "jobs.create": ("Create jobs", "jobs", "create"),
-    "jobs.edit": ("Edit jobs", "jobs", "edit"),
-    "jobs.delete": ("Delete jobs", "jobs", "delete"),
-    "jobs.apply": ("Apply to jobs", "jobs", "apply"),
-    "jobs.view_applications": ("View job applications", "jobs", "view_applications"),
-    "notices.view": ("View notices", "notices", "view"),
-    "notices.manage_categories": ("Manage notice categories", "notices", "manage_categories"),
-    "notices.create": ("Create notices", "notices", "create"),
-    "notices.edit": ("Edit notices", "notices", "edit"),
-    "notices.delete": ("Delete notices", "notices", "delete"),
-    "elections.view": ("View elections", "elections", "view"),
-    "elections.manage": ("Manage elections", "elections", "manage"),
-    "elections.vote": ("Vote in elections", "elections", "vote"),
-    "elections.results": ("View election results", "elections", "results"),
-    "cms.view": ("View CMS", "cms", "view"),
-    "cms.manage": ("Manage CMS", "cms", "manage"),
-}
-
-
 class RBACService:
     """Business logic for RBAC CRUD and assignments."""
 
@@ -79,22 +32,31 @@ class RBACService:
         self.repo = RBACRepository(session)
         self.session = session
 
-    async def ensure_defaults(self) -> None:
-        for perm_name, meta in DEFAULT_PERMISSION_META.items():
-            if await self.repo.get_permission_by_name(perm_name):
-                continue
-            description, resource, action = meta
-            self.session.add(
-                Permission(
-                    name=perm_name,
-                    description=description,
-                    resource=resource,
-                    action=action,
-                )
+    def _canonical_permission_names(self, permission_names: list[str] | set[str]) -> list[str]:
+        canonical = {normalize_permission_name(name) for name in permission_names if name}
+        return sorted(canonical)
+
+    def _is_protected_superadmin_user(self, user: User) -> bool:
+        return user.role == RoleEnum.SUPER_ADMIN
+
+    def _is_protected_superadmin_role(self, role: Role) -> bool:
+        return role.name == RoleEnum.SUPER_ADMIN.value
+
+    def _ensure_user_not_protected(self, user: User) -> None:
+        if self._is_protected_superadmin_user(user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Super admin user is immutable",
             )
 
-        await self.session.flush()
+    def _ensure_role_not_protected(self, role: Role) -> None:
+        if self._is_protected_superadmin_role(role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Super admin role is immutable",
+            )
 
+    async def ensure_defaults(self) -> None:
         for role_enum in RoleEnum:
             existing = await self.repo.get_role_by_name(role_enum.value)
             if existing:
@@ -107,42 +69,40 @@ class RBACService:
                 )
             )
 
-        await self.session.flush()
-
-        all_permissions = await self.repo.list_permissions()
-        perm_by_name = {p.name: p.id for p in all_permissions}
-
-        for role_enum in RoleEnum:
-            role = await self.repo.get_role_by_name(role_enum.value)
-            if not role:
-                continue
-            static_permissions = get_permissions_for_role(role_enum)
-            if "*" in static_permissions:
-                target_ids = [p.id for p in all_permissions]
-            else:
-                target_ids = [perm_by_name[name] for name in static_permissions if name in perm_by_name]
-            existing_mappings = await self.repo.get_role_permissions(role.id)
-            if target_ids and not existing_mappings:
-                await self.repo.replace_role_permissions(role.id, target_ids)
-
         await self.repo.commit()
 
     async def list_permissions(self) -> list[PermissionResponse]:
         await self.ensure_defaults()
         permissions = await self.repo.list_permissions()
-        return [PermissionResponse.model_validate(p) for p in permissions]
+        endpoint_rows = await self.repo.list_endpoint_permissions()
+        endpoint_count_by_name: dict[str, int] = {}
+        for row in endpoint_rows:
+            endpoint_count_by_name[row.permission_name] = endpoint_count_by_name.get(row.permission_name, 0) + 1
+
+        response: list[PermissionResponse] = []
+        for permission in permissions:
+            data = PermissionResponse.model_validate(permission)
+            data.endpoint_count = endpoint_count_by_name.get(permission.name, 0)
+            response.append(data)
+        return response
+
+    async def list_endpoint_permissions(self) -> list[EndpointPermissionResponse]:
+        await self.ensure_defaults()
+        rows = await self.repo.list_endpoint_permissions()
+        return [EndpointPermissionResponse.model_validate(row) for row in rows]
 
     async def create_permission(self, request: PermissionCreateRequest) -> PermissionResponse:
         await self.ensure_defaults()
-        existing = await self.repo.get_permission_by_name(request.name)
+        canonical_name = normalize_permission_name(request.name)
+        existing = await self.repo.get_permission_by_name(canonical_name)
         if existing:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Permission already exists")
 
         permission = Permission(
-            name=request.name,
+            name=canonical_name,
             description=request.description,
             resource=request.resource,
-            action=request.action,
+            action=normalize_permission_name(f"x.{request.action}").split(".", 1)[1],
         )
         self.session.add(permission)
         await self.repo.commit()
@@ -174,6 +134,8 @@ class RBACService:
 
     async def create_role(self, request: RoleCreateRequest) -> RoleResponse:
         await self.ensure_defaults()
+        if request.name == RoleEnum.SUPER_ADMIN.value:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin role is reserved")
         existing = await self.repo.get_role_by_name(request.name)
         if existing:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role already exists")
@@ -196,7 +158,10 @@ class RBACService:
         role = await self.repo.get_role(role_id)
         if not role:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+        self._ensure_role_not_protected(role)
         if request.name:
+            if request.name == RoleEnum.SUPER_ADMIN.value:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin role is reserved")
             role.name = request.name
         if request.description is not None:
             role.description = request.description
@@ -212,6 +177,7 @@ class RBACService:
         role = await self.repo.get_role(role_id)
         if not role:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+        self._ensure_role_not_protected(role)
         await self.repo.replace_role_permissions(role_id, request.permission_ids)
         await self.repo.commit()
         roles = await self.list_roles()
@@ -223,10 +189,13 @@ class RBACService:
     async def list_users(self) -> list[RBACUserResponse]:
         await self.ensure_defaults()
         users = await self.repo.list_users()
-        return [await self._build_user_response(user) for user in users]
+        visible_users = [user for user in users if not self._is_protected_superadmin_user(user)]
+        return [await self._build_user_response(user) for user in visible_users]
 
     async def create_user(self, request: RBACUserCreateRequest) -> RBACUserResponse:
         await self.ensure_defaults()
+        if request.base_role == RoleEnum.SUPER_ADMIN:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Creating super admin via RBAC API is not allowed")
         existing = await self.repo.get_user_by_email(request.email)
         if existing:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists")
@@ -253,6 +222,12 @@ class RBACService:
         user = await self.repo.get_user(user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        self._ensure_user_not_protected(user)
+
+        super_role = await self.repo.get_role_by_name(RoleEnum.SUPER_ADMIN.value)
+        if super_role and super_role.id in request.role_ids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Assigning super admin role via RBAC API is not allowed")
+
         await self.repo.replace_user_roles(user_id, request.role_ids)
         await self.repo.commit()
         return await self.get_user_assignments(user_id)
@@ -262,6 +237,7 @@ class RBACService:
         user = await self.repo.get_user(user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        self._ensure_user_not_protected(user)
         await self.repo.replace_user_permissions(user_id, request.permission_ids)
         await self.repo.commit()
         return await self.get_user_assignments(user_id)
@@ -271,6 +247,8 @@ class RBACService:
         user = await self.repo.get_user(user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        if self._is_protected_superadmin_user(user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin user is hidden from RBAC assignment views")
 
         role_rows = await self.repo.get_user_roles(user_id)
         permission_rows = await self.repo.get_user_permissions(user_id)
@@ -283,7 +261,10 @@ class RBACService:
         role_ids = [row.role_id for row in role_rows]
         permission_ids = [row.permission_id for row in permission_rows]
 
-        effective_permissions = set(get_permissions_for_role(user.role))
+        effective_permissions: set[str] = set()
+
+        if user.role == RoleEnum.SUPER_ADMIN:
+            effective_permissions.add("*")
 
         for role_id in role_ids:
             role_perm_rows = await self.repo.get_role_permissions(role_id)
@@ -302,42 +283,79 @@ class RBACService:
             role_ids=sorted(role_ids),
             permission_ids=sorted(permission_ids),
             roles=sorted([role_lookup[rid] for rid in role_ids if rid in role_lookup]),
-            direct_permissions=sorted([permission_lookup[pid] for pid in permission_ids if pid in permission_lookup]),
-            effective_permissions=sorted(list(effective_permissions)),
+            direct_permissions=self._canonical_permission_names(
+                [permission_lookup[pid] for pid in permission_ids if pid in permission_lookup]
+            ),
+            effective_permissions=self._canonical_permission_names(effective_permissions),
         )
 
     async def get_effective_permissions(self, user: User) -> set[str]:
         """Compute effective permissions for a user from static + dynamic assignments."""
         await self.ensure_defaults()
+        if user.role == RoleEnum.SUPER_ADMIN:
+            all_permissions = await self.repo.list_permissions()
+            return {"*", *[p.name for p in all_permissions]}
         assignments = await self.get_user_assignments(user.id)
-        return set(assignments.effective_permissions)
+        return set(self._canonical_permission_names(assignments.effective_permissions))
 
     async def sync_permissions_from_routes(self, app) -> PermissionSyncResponse:
-        """Discover permissions declared in route dependencies and persist missing ones."""
+        """Discover endpoint permissions and persist CRUD + declared custom permissions."""
         await self.ensure_defaults()
 
         discovered: set[str] = set()
+        active_endpoint_keys: set[tuple[str, str]] = set()
+        endpoint_count = 0
+
         for route in app.routes:
             if not isinstance(route, APIRoute):
                 continue
 
-            dependency_calls: list[Callable] = []
+            resource = self._infer_resource_from_path(route.path)
+            if not resource:
+                continue
 
-            for dep in route.dependencies or []:
-                call = getattr(dep, "dependency", None)
-                if callable(call):
-                    dependency_calls.append(call)
+            declared_permissions = set(self._extract_declared_permissions(route))
+            discovered.update(declared_permissions)
 
-            route_dependant = getattr(route, "dependant", None)
-            if route_dependant:
-                for dep in getattr(route_dependant, "dependencies", []) or []:
-                    call = getattr(dep, "call", None)
-                    if callable(call):
-                        dependency_calls.append(call)
+            for method in sorted(route.methods or []):
+                if method in {"HEAD", "OPTIONS"}:
+                    continue
+                action = self._action_from_method(method)
+                if not action:
+                    continue
 
-            for call in dependency_calls:
-                perms = self._extract_permissions_from_dependency(call)
-                discovered.update(perms)
+                crud_permission_name = f"{resource}.{action}"
+                discovered.add(crud_permission_name)
+
+                endpoint_permission_name = next(iter(declared_permissions), crud_permission_name)
+                endpoint_source = "declared" if endpoint_permission_name in declared_permissions else "auto"
+
+                active_endpoint_keys.add((route.path, method))
+                endpoint_count += 1
+
+                row = await self.repo.get_endpoint_permission(route.path, method)
+                if row:
+                    row.route_name = route.name
+                    row.resource = resource
+                    row.action = action
+                    row.permission_name = endpoint_permission_name
+                    row.source = endpoint_source
+                    row.is_active = True
+                    row.last_synced_at = datetime.utcnow()
+                else:
+                    self.session.add(
+                        EndpointPermission(
+                            route_path=route.path,
+                            http_method=method,
+                            route_name=route.name,
+                            resource=resource,
+                            action=action,
+                            permission_name=endpoint_permission_name,
+                            source=endpoint_source,
+                            is_active=True,
+                            last_synced_at=datetime.utcnow(),
+                        )
+                    )
 
         discovered = {p for p in discovered if p and p != "*"}
         sorted_discovered = sorted(discovered)
@@ -362,8 +380,15 @@ class RBACService:
             )
             created_permissions.append(permission_name)
 
-        if created_permissions:
-            await self.repo.commit()
+        await self.session.flush()
+
+        permission_by_name = {p.name: p.id for p in await self.repo.list_permissions()}
+        endpoint_rows = await self.repo.list_endpoint_permissions()
+        for row in endpoint_rows:
+            row.permission_id = permission_by_name.get(row.permission_name)
+
+        await self.repo.deactivate_missing_endpoint_permissions(active_endpoint_keys)
+        await self.repo.commit()
 
         return PermissionSyncResponse(
             discovered_permissions=sorted_discovered,
@@ -372,6 +397,7 @@ class RBACService:
             discovered_count=len(sorted_discovered),
             created_count=len(created_permissions),
             existing_count=len(existing_permissions),
+            endpoint_count=endpoint_count,
         )
 
     def _extract_permissions_from_dependency(self, call: Callable) -> tuple[str, ...]:
@@ -390,6 +416,45 @@ class RBACService:
             if isinstance(value, tuple):
                 return value
         return tuple()
+
+    def _extract_declared_permissions(self, route: APIRoute) -> tuple[str, ...]:
+        dependency_calls: list[Callable] = []
+
+        for dep in route.dependencies or []:
+            call = getattr(dep, "dependency", None)
+            if callable(call):
+                dependency_calls.append(call)
+
+        route_dependant = getattr(route, "dependant", None)
+        if route_dependant:
+            for dep in getattr(route_dependant, "dependencies", []) or []:
+                call = getattr(dep, "call", None)
+                if callable(call):
+                    dependency_calls.append(call)
+
+        discovered: set[str] = set()
+        for call in dependency_calls:
+            perms = self._extract_permissions_from_dependency(call)
+            discovered.update(normalize_permission_name(p) for p in perms)
+        return tuple(sorted(discovered))
+
+    def _infer_resource_from_path(self, route_path: str) -> str | None:
+        parts = [p for p in route_path.split("/") if p]
+        if not parts:
+            return None
+        if parts[:2] == ["api", "v1"] and len(parts) >= 3:
+            return parts[2]
+        return parts[0]
+
+    def _action_from_method(self, method: str) -> str | None:
+        mapping = {
+            "POST": "create",
+            "GET": "read",
+            "PUT": "update",
+            "PATCH": "update",
+            "DELETE": "delete",
+        }
+        return mapping.get(method)
 
     def _meta_from_permission_name(self, permission_name: str) -> tuple[str, str, str]:
         parts = permission_name.split(".")

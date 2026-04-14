@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import get_db_session
 from app.models.user import User, RoleEnum
 from app.core.security import decode_token
-from app.core.rbac import get_permissions_for_role, has_permissions
+from app.core.rbac import has_permissions
 from app.repositories.user import UserRepository
 from app.services.rbac import RBACService
 
@@ -78,10 +78,11 @@ def require_permission(*permissions: str, require_all: bool = False):
         current_user: User = Depends(get_current_user),
         session: AsyncSession = Depends(get_db_session),
     ) -> User:
+        if current_user.role == RoleEnum.SUPER_ADMIN:
+            return current_user
+
         rbac_service = RBACService(session)
         user_permissions = await rbac_service.get_effective_permissions(current_user)
-        if not user_permissions:
-            user_permissions = get_permissions_for_role(current_user.role)
         if not has_permissions(user_permissions, permissions, require_all):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

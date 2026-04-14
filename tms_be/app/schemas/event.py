@@ -111,6 +111,32 @@ class EventRSVPResponse(BaseModel):
         from_attributes = True
 
 
+class EventPaymentCreateRequest(BaseModel):
+    """Create event payment request."""
+    amount: float = Field(..., ge=0)
+    currency: str = "USD"
+    status: Optional[str] = None  # pending, completed, failed, refunded
+    payment_method: Optional[str] = None
+    transaction_id: Optional[str] = None
+
+
+class EventPaymentResponse(BaseModel):
+    """Event payment response."""
+    id: int
+    event_id: int
+    user_id: int
+    amount: float
+    currency: str
+    status: str
+    payment_method: Optional[str] = None
+    transaction_id: Optional[str] = None
+    paid_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class PaginatedEventResponse(BaseModel):
     """Paginated events response."""
     items: List[EventListResponse]

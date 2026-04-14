@@ -57,7 +57,7 @@ const NotificationItem: React.FC<{
 
 export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, logout, hasAnyPermission } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
   const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } = useNotificationStore();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -78,6 +78,9 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     await logout();
     navigate('/login');
   };
+
+  const canAccessPreferences = hasAnyPermission(['dashboard.read', 'dashboard.view']);
+  const canAccessSettings = hasAnyPermission(['settings.read', 'settings.view']);
 
   return (
     <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-30">
@@ -161,19 +164,25 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
             {showUserMenu && (
               <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20">
-                <button
-                  onClick={() => { setShowUserMenu(false); navigate('/preferences'); }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <User className="w-4 h-4" /> Preferences
-                </button>
-                <button
-                  onClick={() => { setShowUserMenu(false); navigate('/settings/general'); }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <Settings className="w-4 h-4" /> Settings
-                </button>
-                <hr className="my-1 border-gray-200 dark:border-gray-700" />
+                {canAccessPreferences && (
+                  <button
+                    onClick={() => { setShowUserMenu(false); navigate('/preferences'); }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <User className="w-4 h-4" /> Preferences
+                  </button>
+                )}
+                {canAccessSettings && (
+                  <button
+                    onClick={() => { setShowUserMenu(false); navigate('/settings/general'); }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <Settings className="w-4 h-4" /> Settings
+                  </button>
+                )}
+                {(canAccessPreferences || canAccessSettings) && (
+                  <hr className="my-1 border-gray-200 dark:border-gray-700" />
+                )}
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"

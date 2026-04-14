@@ -1,7 +1,7 @@
 """Database models for elections and voting."""
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
-from datetime import datetime, timezone
+from datetime import datetime
 from app.db.base import Base
 
 
@@ -24,8 +24,8 @@ class Election(Base):
     
     # Metadata
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     positions = relationship("ElectionPosition", back_populates="election", cascade="all, delete-orphan")
@@ -62,7 +62,7 @@ class Candidate(Base):
     manifesto = Column(Text, nullable=True)
     
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
     position = relationship("ElectionPosition", back_populates="candidates")
@@ -80,7 +80,7 @@ class Vote(Base):
     
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Unique constraint to prevent duplicate voting
     __table_args__ = (
@@ -104,7 +104,7 @@ class VotingLog(Base):
     ip_address = Column(String(45), nullable=True)
     reason = Column(String(255), nullable=True)
     
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
     election = relationship("Election", back_populates="voting_logs")

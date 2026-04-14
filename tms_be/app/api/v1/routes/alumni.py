@@ -1,5 +1,5 @@
 """Alumni API routes."""
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, BackgroundTasks, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import get_db_session
 from app.dependencies.auth import get_current_user, require_permission
@@ -22,14 +22,19 @@ router = APIRouter(prefix="/api/v1/alumni", tags=["Alumni"])
 )
 async def create_alumni(
     request: AlumniCreateRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db_session),
 ):
     """Create a new alumni profile (Admin only)."""
     alumni_service = AlumniService(session)
-    return await alumni_service.create_alumni(request)
+    return await alumni_service.create_alumni(request, background_tasks)
 
 
-@router.get("/directory", response_model=PaginatedAlumniResponse)
+@router.get(
+    "/directory",
+    response_model=PaginatedAlumniResponse,
+    dependencies=[Depends(require_permission("alumni.read"))],
+)
 async def get_alumni_directory(
     skip: int = 0,
     limit: int = 20,
@@ -53,7 +58,11 @@ async def get_alumni_directory(
     )
 
 
-@router.get("/{alumni_id}", response_model=AlumniResponse)
+@router.get(
+    "/{alumni_id}",
+    response_model=AlumniResponse,
+    dependencies=[Depends(require_permission("alumni.read"))],
+)
 async def get_alumni(
     alumni_id: int,
     session: AsyncSession = Depends(get_db_session),

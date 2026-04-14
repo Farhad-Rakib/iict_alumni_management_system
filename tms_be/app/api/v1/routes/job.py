@@ -29,7 +29,11 @@ async def create_job(
     return await job_service.create_job(request, current_user.id)
 
 
-@router.get("/", response_model=PaginatedJobResponse)
+@router.get(
+    "/",
+    response_model=PaginatedJobResponse,
+    dependencies=[Depends(require_permission("jobs.read"))],
+)
 async def list_jobs(
     skip: int = 0,
     limit: int = 20,
@@ -40,7 +44,11 @@ async def list_jobs(
     return await job_service.list_jobs(skip=skip, limit=limit)
 
 
-@router.get("/{job_id}", response_model=JobResponse)
+@router.get(
+    "/{job_id}",
+    response_model=JobResponse,
+    dependencies=[Depends(require_permission("jobs.read"))],
+)
 async def get_job(
     job_id: int,
     session: AsyncSession = Depends(get_db_session),

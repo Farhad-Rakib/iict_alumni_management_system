@@ -11,6 +11,8 @@ from app.schemas.event import (
     EventListResponse,
     EventRSVPRequest,
     EventRSVPResponse,
+    EventPaymentCreateRequest,
+    EventPaymentResponse,
     PaginatedEventResponse,
 )
 from app.services.event import EventService
@@ -29,7 +31,11 @@ async def create_event(
     return await event_service.create_event(request, current_user.id)
 
 
-@router.get("/", response_model=PaginatedEventResponse)
+@router.get(
+    "/",
+    response_model=PaginatedEventResponse,
+    dependencies=[Depends(require_permission("events.read"))],
+)
 async def list_events(
     skip: int = 0,
     limit: int = 20,
@@ -40,7 +46,11 @@ async def list_events(
     return await event_service.list_events(skip=skip, limit=limit)
 
 
-@router.get("/{event_id}", response_model=EventResponse)
+@router.get(
+    "/{event_id}",
+    response_model=EventResponse,
+    dependencies=[Depends(require_permission("events.read"))],
+)
 async def get_event(
     event_id: int,
     session: AsyncSession = Depends(get_db_session),
@@ -94,3 +104,33 @@ async def get_event_rsvps(
     """Get RSVPs for an event."""
     event_service = EventService(session)
     return await event_service.get_event_rsvps(event_id)
+
+
+@router.post(
+    "/{event_id}/payments",
+    response_model=EventPaymentResponse,
+    dependencies=[Depends(require_permission("events.payments.create"))],
+)
+async def create_event_payment(
+    event_id: int,
+    request: EventPaymentCreateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Record a payment for an event."""
+    event_service = EventService(session)
+    return await event_service.create_event_payment(event_id, current_user.id, request)
+
+
+@router.get(
+    "/{event_id}/payments",
+    response_model=list[EventPaymentResponse],
+    dependencies=[Depends(require_permission("events.payments.read"))],
+)
+async def list_event_payments(
+    event_id: int,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """List payments for an event."""
+    event_service = EventService(session)
+    return await event_service.list_event_payments(event_id)

@@ -43,6 +43,18 @@ class ElectionResponse(BaseModel):
         from_attributes = True
 
 
+class ElectionUpdateRequest(BaseModel):
+    """Update election request."""
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    voting_start: Optional[datetime] = None
+    voting_end: Optional[datetime] = None
+    is_published: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
 class PositionCreateRequest(BaseModel):
     """Create election position request."""
     name: str = Field(..., min_length=1, max_length=100)
@@ -125,6 +137,21 @@ class ElectionResultResponse(BaseModel):
     election_title: str
     total_votes: int
     positions: List[dict]  # Position with candidates and votes
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class VotingLogResponse(BaseModel):
+    """Voting audit log response."""
+    id: int
+    election_id: int
+    user_id: int
+    user_email: Optional[str] = None
+    action: str
+    ip_address: Optional[str] = None
+    reason: Optional[str] = None
     created_at: datetime
 
     class Config:

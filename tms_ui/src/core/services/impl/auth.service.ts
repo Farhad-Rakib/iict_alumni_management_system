@@ -1,5 +1,14 @@
 import { BaseRepository } from '../../api/base.repository';
-import { LoginRequestDto, LoginResponseDto } from '../../../domain/dto/auth.dto';
+import {
+  LoginRequestDto,
+  LoginResponseDto,
+  SendOtpRequestDto,
+  SendOtpResponseDto,
+  VerifyOtpRequestDto,
+  VerifyOtpResponseDto,
+  SetPasswordRequestDto,
+  MessageResponseDto,
+} from '../../../domain/dto/auth.dto';
 import { User, UserRole, UserStatus } from '../../../domain/models/user.model';
 import { IAuthService } from '../auth.service.interface';
 import { getPermissionsForRole } from '../../auth/rbac';
@@ -64,17 +73,49 @@ export class AuthService extends BaseRepository implements IAuthService {
   }
 
   async login(dto: LoginRequestDto): Promise<LoginResponseDto> {
-    const tokenData = await this.post<BackendTokenResponse>('/login', dto);
-    const me = await this.get<BackendCurrentUser>('/me', {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-      },
-    });
+    try {
+      const tokenData = await this.post<BackendTokenResponse>('/login', dto);
+      const me = await this.get<BackendCurrentUser>('/me', {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
+      });
 
-    return {
-      user: mapBackendUser(me),
-      token: tokenData.access_token,
-    };
+      return {
+        user: mapBackendUser(me),
+        token: tokenData.access_token,
+      };
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      throw new Error(detail || error?.message || 'Login failed');
+    }
+  }
+
+  async sendOtp(dto: SendOtpRequestDto): Promise<SendOtpResponseDto> {
+    try {
+      return await this.post<SendOtpResponseDto>('/send-otp', dto);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      throw new Error(detail || error?.message || 'Failed to send OTP');
+    }
+  }
+
+  async verifyOtp(dto: VerifyOtpRequestDto): Promise<VerifyOtpResponseDto> {
+    try {
+      return await this.post<VerifyOtpResponseDto>('/verify-otp', dto);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      throw new Error(detail || error?.message || 'OTP verification failed');
+    }
+  }
+
+  async setPassword(dto: SetPasswordRequestDto): Promise<MessageResponseDto> {
+    try {
+      return await this.post<MessageResponseDto>('/set-password', dto);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      throw new Error(detail || error?.message || 'Failed to set password');
+    }
   }
 
   async logout(): Promise<void> {

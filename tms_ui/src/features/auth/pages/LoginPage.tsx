@@ -1,20 +1,16 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
 import { useAuthStore } from '../store/auth.store';
 import { toast } from '../../../components/ui/Toast/toast.store';
-import { AppConfig } from '../../../core/config/app.config';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { login, isLoading } = useAuthStore();
   const [credentials, setCredentials] = useState({
     email: '',
     password: '',
   });
-
-  const from = (location.state as any)?.from?.pathname || AppConfig.auth.defaultRedirect;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +18,7 @@ export const LoginPage: React.FC = () => {
     try {
       await login(credentials);
       toast.success('Login successful!');
-      navigate(from, { replace: true });
+      navigate('/', { replace: true });
     } catch (error: any) {
       toast.error(error.message || 'Login failed. Please try again.');
     }

@@ -47,6 +47,12 @@ Infrastructure Status: ✅ COMPLETE
 ├── [CHANGELOG.md](CHANGELOG.md)
 │   └─ Version history, feature list, roadmap
 │
+├── [DEV_GUIDE.md](DEV_GUIDE.md)
+│   └─ Quick developer workflow to add new features in backend, frontend, RBAC, and menu
+│
+├── [FEATURE_EXTENSION_DEVELOPER_GUIDE.md](FEATURE_EXTENSION_DEVELOPER_GUIDE.md)
+│   └─ Detailed extension handbook with checklists, validation commands, and pitfalls
+│
 └── [CONTRIBUTING.md](CONTRIBUTING.md)
     └─ Contribution guidelines, coding standards, testing requirements
 

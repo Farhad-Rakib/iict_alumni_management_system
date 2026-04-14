@@ -2,6 +2,7 @@ import {
   CreatePermissionRequest,
   CreateRbacUserRequest,
   CreateRoleRequest,
+  EndpointPermission,
   RbacPermission,
   RbacRole,
   RbacUser,
@@ -11,6 +12,7 @@ import {
 
 export interface IRbacService {
   getPermissions(): Promise<RbacPermission[]>;
+  getEndpointPermissions(): Promise<EndpointPermission[]>;
   createPermission(dto: CreatePermissionRequest): Promise<RbacPermission>;
   syncPermissions(): Promise<PermissionSyncResponse>;
   getRoles(): Promise<RbacRole[]>;

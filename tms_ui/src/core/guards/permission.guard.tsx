@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../features/auth/store/auth.store';
+import { toast } from '../../components/ui/Toast/toast.store';
 
 interface PermissionGuardProps {
   children: React.ReactNode;
@@ -18,8 +20,14 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
     ? hasAllPermissions(permissions)
     : hasAnyPermission(permissions);
 
+  useEffect(() => {
+    if (!hasAccess) {
+      toast.warning('You do not have permission to access that page.');
+    }
+  }, [hasAccess]);
+
   if (!hasAccess) {
-    return <Navigate to="/403" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

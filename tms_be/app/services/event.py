@@ -10,6 +10,8 @@ from app.schemas.event import (
     EventResponse,
     EventListResponse,
     EventRSVPResponse,
+    EventPaymentCreateRequest,
+    EventPaymentResponse,
     PaginatedEventResponse,
 )
 from app.core.utils import get_utc_now
@@ -62,6 +64,7 @@ class EventService:
     def __init__(self, session: AsyncSession):
         self.event_repo = EventRepository(session)
         self.rsvp_repo = EventRSVPRepository(session)
+        self.payment_repo = EventPaymentRepository(session)
         self.session = session
 
     async def create_event(self, request: EventCreateRequest, user_id: int) -> EventResponse:
@@ -171,3 +174,58 @@ class EventService:
 
         rsvps = await self.rsvp_repo.get_by_event(event_id)
         return [EventRSVPResponse.model_validate(r) for r in rsvps]
+
+    async def create_event_payment(
+        self,
+        event_id: int,
+        user_id: int,
+        request: EventPaymentCreateRequest,
+    ) -> EventPaymentResponse:
+        """Record payment for an event."""
+        event = await self.event_repo.get_by_id(event_id)
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Event not found",
+            )
+        if not event.is_paid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Event does not require payment",
+            )
+
+        payment_data = request.model_dump()
+        payment_data["event_id"] = event_id
+        payment_data["user_id"] = user_id
+
+        if payment_data.get("status") is None:
+            payment_data["status"] = "pending"
+
+        payment = await self.payment_repo.create(payment_data)
+        await self.payment_repo.commit()
+        return payment
+
+    async def list_event_payments(self, event_id: int) -> list[EventPaymentResponse]:
+        """List payments for an event."""
+        event = await self.event_repo.get_by_id(event_id)
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Event not found",
+            )
+        payments = await self.payment_repo.get_by_event(event_id)
+        return [EventPaymentResponse.model_validate(p) for p in payments]
+
+
+class EventPaymentRepository(BaseRepository[EventPayment]):
+    """Repository for Event payment operations."""
+
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, EventPayment)
+
+    async def get_by_event(self, event_id: int) -> list[EventPayment]:
+        """Get payments for an event."""
+        result = await self.session.execute(
+            select(self.model).where(self.model.event_id == event_id)
+        )
+        return result.scalars().all()

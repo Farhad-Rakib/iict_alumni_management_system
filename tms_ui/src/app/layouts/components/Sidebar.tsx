@@ -8,6 +8,7 @@ import { MenuItem } from '../../../domain/models/menu.model';
 import { AppConfig } from '../../../core/config/app.config';
 import { usePreferencesStore } from '../../../core/stores/preferences.store';
 import { useSettingsStore } from '../../../features/settings/store/settings.store';
+import { useAuthStore } from '../../../features/auth/store/auth.store';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -18,11 +19,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { menuStyle } = usePreferencesStore();
   const { general } = useSettingsStore();
+  const userId = useAuthStore((state) => state.user?.id);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   const { data: menuItems = [] } = useQuery({
-    queryKey: ['menu'],
+    queryKey: ['menu', userId],
     queryFn: () => menuApi.getMenuItems(),
+    enabled: Boolean(userId),
   });
 
   const toggleExpand = (itemId: string) => {

@@ -1,4 +1,5 @@
 """Service for alumni operations."""
+from fastapi import BackgroundTasks
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
@@ -6,6 +7,7 @@ from app.repositories.base import BaseRepository
 from app.repositories.user import UserRepository
 from app.models.alumni import Alumni
 from app.models.user import User, RoleEnum
+from app.schemas.auth import SendOTPRequest
 from app.schemas.alumni import (
     AlumniCreateRequest,
     AlumniUpdateRequest,
@@ -14,6 +16,7 @@ from app.schemas.alumni import (
     PaginatedAlumniResponse,
 )
 from app.core.utils import get_utc_now
+from app.services.auth import AuthService
 
 
 class AlumniRepository(BaseRepository[Alumni]):
@@ -79,9 +82,14 @@ class AlumniService:
         self.user_repo = UserRepository(session)
         self.session = session
 
-    async def create_alumni(self, request: AlumniCreateRequest) -> dict:
+    async def create_alumni(
+        self,
+        request: AlumniCreateRequest,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> dict:
         """Create new alumni profile."""
         existing_user = await self.user_repo.get_by_email(request.email)
+        needs_onboarding = False
         if existing_user:
             existing_alumni = await self.alumni_repo.get_by_user_id(existing_user.id)
             if existing_alumni:
@@ -94,6 +102,9 @@ class AlumniService:
             user.phone = request.phone
             if user.role != RoleEnum.ALUMNI:
                 user.role = RoleEnum.ALUMNI
+            if not user.password_hash or not user.is_verified:
+                user.is_locked = False
+                needs_onboarding = True
         else:
             user = User(
                 email=request.email,
@@ -104,6 +115,7 @@ class AlumniService:
                 is_verified=False,
                 is_locked=False,
             )
+            needs_onboarding = True
             self.session.add(user)
             await self.session.flush()
 
@@ -118,10 +130,18 @@ class AlumniService:
         alumni = await self.alumni_repo.create(alumni_data)
         await self.alumni_repo.commit()
 
+        if needs_onboarding:
+            auth_service = AuthService(self.session)
+            await auth_service.send_otp(
+                SendOTPRequest(email=request.email),
+                background_tasks,
+            )
+
         return {
             "message": "Alumni profile created",
             "alumni_id": alumni.id,
             "user_id": user.id,
+            "onboarding_otp_sent": needs_onboarding,
         }
 
     async def get_alumni_by_id(self, alumni_id: int) -> AlumniResponse:

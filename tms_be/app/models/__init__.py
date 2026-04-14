@@ -6,8 +6,9 @@ from app.models.job import Job, JobApplication
 from app.models.notice import Notice, NoticeCategory, NoticeNotification
 from app.models.election import Election, ElectionPosition, Candidate, Vote, VotingLog
 from app.models.cms import CMSPage, Slider, Committee, Gallery, ContactInfo
-from app.models.rbac import Role, RolePermission, UserRole, UserPermission
+from app.models.rbac import Role, RolePermission, UserRole, UserPermission, EndpointPermission
 from app.models.site_settings import SiteSetting
+from app.models.menu import MenuItem
 
 __all__ = [
     "User",
@@ -40,5 +41,7 @@ __all__ = [
     "RolePermission",
     "UserRole",
     "UserPermission",
+    "EndpointPermission",
     "SiteSetting",
+    "MenuItem",
 ]

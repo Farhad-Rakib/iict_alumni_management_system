@@ -1,17 +1,22 @@
 """Service for election operations."""
+from sqlalchemy import and_, desc
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.repositories.base import BaseRepository
+from app.repositories.user import UserRepository
+from app.models.user import User
 from app.models.election import Election, ElectionPosition, Candidate, Vote, VotingLog
 from app.schemas.election import (
     ElectionCreateRequest,
+    ElectionUpdateRequest,
     ElectionResponse,
     PositionCreateRequest,
     PositionResponse,
     CandidateCreateRequest,
     CandidateResponse,
     ElectionResultResponse,
+    VotingLogResponse,
 )
 from app.core.utils import get_utc_now
 
@@ -73,6 +78,33 @@ class VoteRepository(BaseRepository[Vote]):
         )
         return result.scalar() or 0
 
+    async def get_user_position_votes(
+        self,
+        election_id: int,
+        user_id: int,
+        position_id: int,
+    ) -> list[Vote]:
+        """Get all votes by a user for a specific position in an election."""
+        result = await self.session.execute(
+            select(Vote)
+            .join(Candidate, Vote.candidate_id == Candidate.id)
+            .where(
+                and_(
+                    Vote.election_id == election_id,
+                    Vote.user_id == user_id,
+                    Candidate.position_id == position_id,
+                )
+            )
+        )
+        return result.scalars().all()
+
+
+class VotingLogRepository(BaseRepository[VotingLog]):
+    """Repository for voting audit logs."""
+
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, VotingLog)
+
 
 class ElectionService:
     """Service for election operations."""
@@ -82,6 +114,8 @@ class ElectionService:
         self.position_repo = PositionRepository(session)
         self.candidate_repo = CandidateRepository(session)
         self.vote_repo = VoteRepository(session)
+        self.voting_log_repo = VotingLogRepository(session)
+        self.user_repo = UserRepository(session)
         self.session = session
 
     async def create_election(self, request: ElectionCreateRequest, user_id: int) -> ElectionResponse:
@@ -103,6 +137,38 @@ class ElectionService:
                 detail="Election not found",
             )
         return election
+
+    async def update_election(
+        self,
+        election_id: int,
+        request: ElectionUpdateRequest,
+    ) -> ElectionResponse:
+        """Update an election."""
+        election = await self.election_repo.get_by_id(election_id)
+        if not election:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Election not found",
+            )
+
+        update_data = request.model_dump(exclude_unset=True)
+        if not update_data:
+            return election
+
+        updated = await self.election_repo.update(election_id, update_data)
+        await self.election_repo.commit()
+        return updated
+
+    async def delete_election(self, election_id: int) -> None:
+        """Delete an election."""
+        election = await self.election_repo.get_by_id(election_id)
+        if not election:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Election not found",
+            )
+        await self.election_repo.delete(election_id)
+        await self.election_repo.commit()
 
     async def list_elections(self) -> list[ElectionResponse]:
         """List all elections."""
@@ -140,6 +206,13 @@ class ElectionService:
                 detail="Position not found",
             )
 
+        candidate_user = await self.user_repo.get_by_id(request.user_id)
+        if not candidate_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Candidate user not found",
+            )
+
         candidate_data = request.model_dump()
         candidate_data["position_id"] = position_id
 
@@ -153,7 +226,14 @@ class ElectionService:
         candidates = await self.candidate_repo.get_by_position(position_id)
         return [CandidateResponse.model_validate(c) for c in candidates]
 
-    async def cast_vote(self, election_id: int, user_id: int, candidate_id: int) -> dict:
+    async def cast_vote(
+        self,
+        election_id: int,
+        user_id: int,
+        candidate_id: int,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict:
         """Cast a vote."""
         election = await self.election_repo.get_by_id(election_id)
         if not election:
@@ -165,6 +245,16 @@ class ElectionService:
         # Check if voting is open
         now = get_utc_now()
         if now < election.voting_start or now > election.voting_end:
+            await self.voting_log_repo.create(
+                {
+                    "election_id": election_id,
+                    "user_id": user_id,
+                    "action": "blocked",
+                    "ip_address": ip_address,
+                    "reason": "Voting window closed",
+                }
+            )
+            await self.voting_log_repo.commit()
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Voting is not open",
@@ -172,6 +262,16 @@ class ElectionService:
 
         candidate = await self.candidate_repo.get_by_id(candidate_id)
         if not candidate:
+            await self.voting_log_repo.create(
+                {
+                    "election_id": election_id,
+                    "user_id": user_id,
+                    "action": "attempted",
+                    "ip_address": ip_address,
+                    "reason": "Candidate not found",
+                }
+            )
+            await self.voting_log_repo.commit()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Candidate not found",
@@ -180,23 +280,41 @@ class ElectionService:
         # Check if candidate belongs to this election
         position = await self.position_repo.get_by_id(candidate.position_id)
         if position.election_id != election_id:
+            await self.voting_log_repo.create(
+                {
+                    "election_id": election_id,
+                    "user_id": user_id,
+                    "action": "blocked",
+                    "ip_address": ip_address,
+                    "reason": "Candidate outside election",
+                }
+            )
+            await self.voting_log_repo.commit()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Candidate not in this election",
             )
 
-        # Check if user already voted for same candidate
-        existing = await self.session.execute(
-            select(Vote).where(
-                (Vote.election_id == election_id) &
-                (Vote.user_id == user_id) &
-                (Vote.candidate_id == candidate_id)
-            )
+        # Enforce one vote per user per position (max_votes default is 1).
+        existing_position_votes = await self.vote_repo.get_user_position_votes(
+            election_id,
+            user_id,
+            position.id,
         )
-        if existing.scalar_one_or_none():
+        if len(existing_position_votes) >= position.max_votes:
+            await self.voting_log_repo.create(
+                {
+                    "election_id": election_id,
+                    "user_id": user_id,
+                    "action": "blocked",
+                    "ip_address": ip_address,
+                    "reason": f"Already voted max {position.max_votes} time(s) for position",
+                }
+            )
+            await self.voting_log_repo.commit()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Already voted for this candidate",
+                detail="You have already used your vote quota for this position",
             )
 
         # Cast vote
@@ -204,8 +322,19 @@ class ElectionService:
             "election_id": election_id,
             "user_id": user_id,
             "candidate_id": candidate_id,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
         }
-        vote = await self.vote_repo.create(vote_data)
+        await self.vote_repo.create(vote_data)
+        await self.voting_log_repo.create(
+            {
+                "election_id": election_id,
+                "user_id": user_id,
+                "action": "voted",
+                "ip_address": ip_address,
+                "reason": f"candidate_id={candidate_id}",
+            }
+        )
         await self.vote_repo.commit()
 
         return {"message": "Vote recorded"}
@@ -257,3 +386,37 @@ class ElectionService:
             positions=positions_data,
             created_at=get_utc_now(),
         )
+
+    async def get_voting_logs(self, election_id: int, limit: int = 200) -> list[VotingLogResponse]:
+        """Get recent voting audit logs for an election."""
+        election = await self.election_repo.get_by_id(election_id)
+        if not election:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Election not found",
+            )
+
+        # Query directly with VotingLog + User email, most recent first.
+        rows = await self.session.execute(
+            select(VotingLog, User.email)
+            .join(User, VotingLog.user_id == User.id)
+            .where(VotingLog.election_id == election_id)
+            .order_by(desc(VotingLog.created_at))
+            .limit(limit)
+        )
+
+        logs: list[VotingLogResponse] = []
+        for log, user_email in rows.all():
+            logs.append(
+                VotingLogResponse(
+                    id=log.id,
+                    election_id=log.election_id,
+                    user_id=log.user_id,
+                    user_email=user_email,
+                    action=log.action,
+                    ip_address=log.ip_address,
+                    reason=log.reason,
+                    created_at=log.created_at,
+                )
+            )
+        return logs
