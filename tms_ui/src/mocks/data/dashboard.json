@@ -1,0 +1,106 @@
+{
+  "stats": [
+    {
+      "id": "total-users",
+      "title": "Total Users",
+      "value": 2543,
+      "change": 12.5,
+      "changeType": "increase",
+      "icon": "Users",
+      "color": "#006A4E"
+    },
+    {
+      "id": "revenue",
+      "title": "Revenue",
+      "value": "$45,231",
+      "change": 8.2,
+      "changeType": "increase",
+      "icon": "DollarSign",
+      "color": "#10b981"
+    },
+    {
+      "id": "orders",
+      "title": "Orders",
+      "value": 1234,
+      "change": -3.1,
+      "changeType": "decrease",
+      "icon": "ShoppingCart",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "conversion",
+      "title": "Conversion Rate",
+      "value": "3.2%",
+      "change": 2.4,
+      "changeType": "increase",
+      "icon": "TrendingUp",
+      "color": "#8b5cf6"
+    }
+  ],
+  "chartData": {
+    "revenue": [
+      { "name": "Jan", "value": 4000 },
+      { "name": "Feb", "value": 3000 },
+      { "name": "Mar", "value": 5000 },
+      { "name": "Apr", "value": 4500 },
+      { "name": "May", "value": 6000 },
+      { "name": "Jun", "value": 5500 },
+      { "name": "Jul", "value": 7000 }
+    ],
+    "users": [
+      { "name": "Jan", "value": 400 },
+      { "name": "Feb", "value": 600 },
+      { "name": "Mar", "value": 800 },
+      { "name": "Apr", "value": 700 },
+      { "name": "May", "value": 900 },
+      { "name": "Jun", "value": 1100 },
+      { "name": "Jul", "value": 1300 }
+    ],
+    "orders": [
+      { "name": "Jan", "value": 240 },
+      { "name": "Feb", "value": 320 },
+      { "name": "Mar", "value": 280 },
+      { "name": "Apr", "value": 390 },
+      { "name": "May", "value": 420 },
+      { "name": "Jun", "value": 380 },
+      { "name": "Jul", "value": 450 }
+    ]
+  },
+  "recentActivity": [
+    {
+      "id": "1",
+      "user": "Alumni Officer",
+      "action": "Created a new user account",
+      "timestamp": "2024-03-22T08:30:00Z",
+      "type": "success"
+    },
+    {
+      "id": "2",
+      "user": "Sarah Manager",
+      "action": "Updated system settings",
+      "timestamp": "2024-03-22T07:15:00Z",
+      "type": "info"
+    },
+    {
+      "id": "3",
+      "user": "Mike User",
+      "action": "Failed login attempt detected",
+      "timestamp": "2024-03-22T06:45:00Z",
+      "type": "error"
+    },
+    {
+      "id": "4",
+      "user": "Emma Wilson",
+      "action": "Generated monthly report",
+      "timestamp": "2024-03-22T05:20:00Z",
+      "type": "success"
+    },
+    {
+      "id": "5",
+      "user": "David Brown",
+      "action": "Account verification pending",
+      "timestamp": "2024-03-22T04:10:00Z",
+      "type": "warning"
+    }
+  ]
+}

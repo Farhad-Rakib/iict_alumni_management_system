@@ -1,0 +1,120 @@
+[
+  {
+    "id": "dashboard",
+    "label": "Dashboard",
+    "path": "/dashboard",
+    "icon": "LayoutDashboard",
+    "permissions": ["dashboard.view"]
+  },
+  {
+    "id": "users",
+    "label": "Alumni Directory",
+    "icon": "Users",
+    "permissions": ["users.view"],
+    "children": [
+      {
+        "id": "users-list",
+        "label": "All Alumni",
+        "path": "/users",
+        "permissions": ["users.view"]
+      }
+    ]
+  },
+  {
+    "id": "activity",
+    "label": "Activity Log",
+    "path": "/activity",
+    "icon": "Activity",
+    "permissions": ["activity.view"]
+  },
+  {
+    "id": "reports",
+    "label": "Reports",
+    "path": "/reports",
+    "icon": "FileText",
+    "permissions": ["reports.view"],
+    "badge": "New",
+    "badgeVariant": "success"
+  },
+  {
+    "id": "settings",
+    "label": "Settings",
+    "icon": "Settings",
+    "permissions": ["settings.view"],
+    "children": [
+      {
+        "id": "settings-general",
+        "label": "General",
+        "path": "/settings/general",
+        "permissions": ["settings.view"]
+      },
+      {
+        "id": "settings-security",
+        "label": "Security",
+        "path": "/settings/security",
+        "permissions": ["settings.view"]
+      },
+      {
+        "id": "settings-rbac",
+        "label": "RBAC",
+        "permissions": ["rbac.manage"],
+        "children": [
+          {
+            "id": "settings-rbac-overview",
+            "label": "Overview",
+            "path": "/settings/rbac",
+            "permissions": ["rbac.manage"]
+          },
+          {
+            "id": "settings-rbac-roles",
+            "label": "Role",
+            "path": "/settings/rbac?section=roles",
+            "permissions": ["rbac.manage"]
+          },
+          {
+            "id": "settings-rbac-users",
+            "label": "User",
+            "path": "/settings/rbac?section=users",
+            "permissions": ["rbac.manage"]
+          },
+          {
+            "id": "settings-rbac-permissions",
+            "label": "Permissions",
+            "path": "/settings/rbac?section=permissions",
+            "permissions": ["rbac.manage"]
+          },
+          {
+            "id": "settings-rbac-role-permissions",
+            "label": "Role Permission",
+            "path": "/settings/rbac?section=role-permissions",
+            "permissions": ["rbac.manage"]
+          },
+          {
+            "id": "settings-rbac-user-roles",
+            "label": "User Role Assignment",
+            "path": "/settings/rbac?section=user-roles",
+            "permissions": ["rbac.manage"]
+          },
+          {
+            "id": "settings-rbac-user-permissions",
+            "label": "User Permission Assignment",
+            "path": "/settings/rbac?section=user-permissions",
+            "permissions": ["rbac.manage"]
+          }
+        ]
+      },
+      {
+        "id": "settings-notifications",
+        "label": "Notifications",
+        "path": "/settings/notifications",
+        "permissions": ["settings.view"]
+      }
+    ]
+  },
+  {
+    "id": "preferences",
+    "label": "Preferences",
+    "path": "/preferences",
+    "icon": "Sliders"
+  }
+]

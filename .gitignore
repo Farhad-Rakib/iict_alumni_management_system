@@ -38,6 +38,20 @@ uploads/
 # Do not track prompts
 PROMPTS/
 
-# Local runbooks
-MENU_ADDING_INSTRUCTIONS_LOCAL.md
-*.md
+# Local documentation and temporary files (root level only)
+/*.md
+/*.sh
+/*.zip
+/*.json
+!docker-compose*.yml
+!.bolt/
+
+# Exception for essential project files
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.app.json
+!tsconfig.node.json
+
+# ignore mocks
+/tms_ui/mocks/
