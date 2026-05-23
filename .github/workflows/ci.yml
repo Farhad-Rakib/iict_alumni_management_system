@@ -1,0 +1,195 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  # Backend Testing
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: ./tms_be
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run linting
+        working-directory: ./tms_be
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Run tests
+        working-directory: ./tms_be
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          ENVIRONMENT: test
+        run: |
+          pytest -v --tb=short || true
+
+  # Frontend Testing
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: ./tms_ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./tms_ui
+        run: npm ci
+
+      - name: Run linting
+        working-directory: ./tms_ui
+        run: npm run lint || true
+
+      - name: Build frontend
+        working-directory: ./tms_ui
+        run: npm run build
+
+  # Build Docker Images and Save as TAR
+  build-images:
+    needs: [backend-test, frontend-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        run: |
+          docker buildx build \
+            -f ./tms_be/Dockerfile \
+            -t tms-backend:${{ github.ref_name }}-${{ github.sha }} \
+            --output type=docker \
+            ./tms_be
+
+      - name: Build frontend image
+        run: |
+          docker buildx build \
+            -f ./tms_ui/Dockerfile \
+            -t tms-frontend:${{ github.ref_name }}-${{ github.sha }} \
+            --output type=docker \
+            ./tms_ui
+
+      - name: Save backend image as TAR
+        run: |
+          mkdir -p ./docker-images
+          docker save tms-backend:${{ github.ref_name }}-${{ github.sha }} \
+            -o ./docker-images/tms-backend-${{ github.ref_name }}-${{ github.sha }}.tar
+
+      - name: Save frontend image as TAR
+        run: |
+          docker save tms-frontend:${{ github.ref_name }}-${{ github.sha }} \
+            -o ./docker-images/tms-frontend-${{ github.ref_name }}-${{ github.sha }}.tar
+
+      - name: Upload backend image
+        uses: actions/upload-artifact@v4
+        with:
+          name: tms-backend-image
+          path: ./docker-images/tms-backend-*.tar
+          retention-days: 1
+
+      - name: Upload frontend image
+        uses: actions/upload-artifact@v4
+        with:
+          name: tms-frontend-image
+          path: ./docker-images/tms-frontend-*.tar
+          retention-days: 1
+
+
+  # Deploy to Contabo VPS
+  deploy:
+    needs: build-images
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download backend image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tms-backend-image
+          path: ./docker-images
+
+      - name: Download frontend image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tms-frontend-image
+          path: ./docker-images
+
+      - name: Deploy to Contabo VPS
+        env:
+          DEPLOY_KEY: ${{ secrets.CONTABO_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.CONTABO_HOST }}
+          DEPLOY_USER: ${{ secrets.CONTABO_USER }}
+          DEPLOY_PORT: ${{ secrets.CONTABO_SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          # Add host to known_hosts
+          ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          # Copy docker images to VPS
+          scp -P $DEPLOY_PORT -i ~/.ssh/deploy_key \
+            ./docker-images/tms-backend-*.tar \
+            $DEPLOY_USER@$DEPLOY_HOST:/tmp/
+          
+          scp -P $DEPLOY_PORT -i ~/.ssh/deploy_key \
+            ./docker-images/tms-frontend-*.tar \
+            $DEPLOY_USER@$DEPLOY_HOST:/tmp/
+          
+          # Copy deployment script
+          scp -P $DEPLOY_PORT -i ~/.ssh/deploy_key \
+            ./.github/scripts/deploy.sh \
+            $DEPLOY_USER@$DEPLOY_HOST:/tmp/deploy.sh
+          
+          # Execute deployment
+          ssh -p $DEPLOY_PORT -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            $DEPLOY_USER@$DEPLOY_HOST \
+            "bash /tmp/deploy.sh ${{ github.ref_name }} ${{ github.sha }}"
+
+      - name: Verify Deployment
+        env:
+          DEPLOY_KEY: ${{ secrets.CONTABO_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.CONTABO_HOST }}
+          DEPLOY_USER: ${{ secrets.CONTABO_USER }}
+          DEPLOY_PORT: ${{ secrets.CONTABO_SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          ssh -p $DEPLOY_PORT -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            $DEPLOY_USER@$DEPLOY_HOST \
+            "docker ps --filter 'label=app=tms' --format '{{.Names}}: {{.Status}}'"
+

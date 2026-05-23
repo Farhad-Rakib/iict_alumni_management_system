@@ -4,6 +4,34 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: tms_db_prod
+    environment:
+      POSTGRES_DB: ${DB_NAME:?error}
+      POSTGRES_USER: ${DB_USER:?error}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?error}
+      POSTGRES_INITDB_ARGS: "-c timezone=UTC"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - alumni_network
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+
   # Redis Cache
   redis:
     image: redis:7-alpine
@@ -40,7 +68,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     command: gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
     networks:
       - alumni_network
@@ -71,6 +102,8 @@ services:
         max-file: "10"
 
 volumes:
+  postgres_data_prod:
+    driver: local
   redis_data_prod:
     driver: local
 
@@ -78,4 +111,7 @@ networks:
   alumni_network:
     driver: bridge
 
-# NOTE: PostgreSQL is on host machine, not containerized
+# PostgreSQL Database: Containerized with persistent storage
+# Redis Cache: Containerized with persistent storage
+# All services are health-checked before dependent services start
+
