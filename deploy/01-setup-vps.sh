@@ -51,6 +51,9 @@ echo \
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
+# Ensure docker group exists
+sudo groupadd -f docker
+
 log_success "Docker installed"
 # ============================================
 # 2. Create Dedicated CI/CD Deployment User
