@@ -1,78 +1,37 @@
-# Production Docker Compose Configuration - with Containerized PostgreSQL.
-# PostgreSQL runs in a container as part of the docker-compose setup.
+# Production Docker Compose for Contabo VPS - Without PostgreSQL
+# PostgreSQL is installed physically on the VPS
+# Redis can also be installed physically or run in Docker
+# Custom ports allow multiple projects on same VPS
 
 version: '3.8'
 
 services:
-  # PostgreSQL Database
-  db:
-    image: postgres:15-alpine
-    container_name: tms_db_prod
-    environment:
-      POSTGRES_DB: ${DB_NAME:?error}
-      POSTGRES_USER: ${DB_USER:?error}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?error}
-      POSTGRES_INITDB_ARGS: "-c timezone=UTC"
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - alumni_network
-    restart: always
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "10"
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: alumni_redis_prod
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?error}
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data_prod:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - alumni_network
-    restart: always
-
   # Backend API
   backend:
-    build:
-      context: ./tms_be
-      dockerfile: Dockerfile
+    image: ghcr.io/farhad-rakib/iict_alumni_management_system/alumni-backend:latest
     container_name: alumni_backend_prod
     environment:
-      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@postgres:5432/alumni_db
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      # PostgreSQL - installed physically on VPS
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      # Redis - can be Docker container or physical installation
+      REDIS_URL: ${REDIS_URL:-redis://localhost:6379/0}
       SECRET_KEY: ${SECRET_KEY:?error}
       DEBUG: "False"
       CORS_ORIGINS: ${CORS_ORIGINS:?error}
       SMTP_SERVER: ${SMTP_SERVER:?error}
       SMTP_USER: ${SMTP_USER:?error}
       SMTP_PASSWORD: ${SMTP_PASSWORD:?error}
+      ENVIRONMENT: production
     ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+      - "${BACKEND_PORT:-8001}:8000"
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - alumni_network
     restart: always
@@ -81,17 +40,32 @@ services:
       options:
         max-size: "10m"
         max-file: "10"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # Frontend UI
   frontend:
-    build:
-      context: ./tms_ui
-      dockerfile: Dockerfile
+    image: ghcr.io/farhad-rakib/iict_alumni_management_system/alumni-frontend:latest
     container_name: alumni_frontend_prod
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:?error}
+      VITE_APP_NAME: ${VITE_APP_NAME:?error}
     ports:
-      - "5173:5173"
-    depends_on:
-      - backend
+      - "${FRONTEND_PORT:-3000}:80"
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - alumni_network
     restart: always
@@ -100,18 +74,16 @@ services:
       options:
         max-size: "10m"
         max-file: "10"
-
-volumes:
-  postgres_data_prod:
-    driver: local
-  redis_data_prod:
-    driver: local
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
 networks:
   alumni_network:
     driver: bridge
-
-# PostgreSQL Database: Containerized with persistent storage
-# Redis Cache: Containerized with persistent storage
-# All services are health-checked before dependent services start
 

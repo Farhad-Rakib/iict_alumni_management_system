@@ -38,9 +38,20 @@ uploads/
 # Do not track prompts
 PROMPTS/
 
-# Local documentation and temporary files (root level only)
-/*.md
-/*.sh
+# Local documentation and temporary files
+# Ignore all markdown files by default
+*.md
+# But keep documentation in docs folder
+docs/
+docs/**/*.md
+# Keep essential project documentation
+!README.md
+!tms_ui/README.md
+!tms_ui/DEVELOPER_GUIDE.md
+!tms_be/README.md
+
+# Root level scripts and files (local only, don't commit)
+!/*.sh
 /*.zip
 /*.json
 !docker-compose*.yml

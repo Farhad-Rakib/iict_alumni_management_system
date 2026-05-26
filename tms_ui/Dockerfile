@@ -1,26 +1,35 @@
-# Frontend Dockerfile - Multi-stage build
+# Frontend Dockerfile - Multi-stage build for Production
 
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json ./
+# Copy package files
+COPY package*.json ./
 
-RUN npm install --only=production
+# Install dependencies
+RUN npm ci
 
+# Copy application source
 COPY . .
 
+# Build application
 RUN npm run build
 
-# Production stage
+# Production stage - Nginx
 FROM nginx:alpine
 
-# Copy nginx config
-RUN echo 'server { listen 5173; location / { root /usr/share/nginx/html; try_files $uri $uri/ /index.html; } }' > /etc/nginx/conf.d/default.conf
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
 
-# Copy built app from builder
+# Copy custom nginx config
+COPY deploy/nginx-app.conf /etc/nginx/conf.d/default.conf
+
+# Copy built app from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE 5173
+# Expose default port (can be overridden via Dockerfile PORT or docker-compose)
+EXPOSE 80
 
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
