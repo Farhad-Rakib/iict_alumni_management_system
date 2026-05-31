@@ -38,24 +38,27 @@ uploads/
 # Do not track prompts
 PROMPTS/
 
-# Local documentation and temporary files
-# Ignore all markdown files by default
-*.md
-# But keep documentation in docs folder
+# Ignore deployment and documentation folders
+deploy/
 docs/
-docs/**/*.md
-# Keep essential project documentation
-!README.md
-!tms_ui/README.md
-!tms_ui/DEVELOPER_GUIDE.md
-!tms_be/README.md
 
-# Root level scripts and files (local only, don't commit)
-!/*.sh
+# Ignore all markdown files
+*.md
+!README.md
+
+# Ignore root level files (scripts, archives, configs, etc)
+/*.sh
 /*.zip
 /*.json
 !docker-compose*.yml
-!.bolt/
+!init-db.sql
+
+# Keep essential project structure
+!tms_be/
+!tms_ui/
+!tms_be/README.md
+!tms_ui/README.md
+!tms_ui/DEVELOPER_GUIDE.md
 
 # Exception for essential project files
 !package.json
@@ -64,7 +67,7 @@ docs/**/*.md
 !tsconfig.app.json
 !tsconfig.node.json
 
-# ignore mocks
+# Ignore mocks and temporary files
 /tms_ui/mocks/
 /.tmp_admin_starter/
 tmp_admin_starter
