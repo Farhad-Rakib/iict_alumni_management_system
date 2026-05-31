@@ -40,7 +40,11 @@ PROMPTS/
 # Ignore deployment and documentation folders
 deploy/
 docs/
-
+.env.production.template
+docker-compose.override.yml
+docker-compose.prod.yml
+setup.sh
+start.sh
 # Ignore all markdown files
 *.md
 !README.md
